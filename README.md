@@ -28,7 +28,7 @@ Intro to implementation of RISC-V. Implementing a non-pipelined, four cycle RISC
 Implementing a 3-stage pipelined RISC-V CPU, by solving control hazards using epoch.
 
 ### Lab6
-Implementing a 5-stage pipelined RISC-V CPU, by solving control hazards using epoch and solving data hazards by scoreboard.(lab6-1)
+Implementing a 5-stage pipelined RISC-V CPU, by solving control hazards using epoch and solving data hazards by scoreboard.(lab6-1)         
 lab6-2 is the same, but solves data hazards by forwarding.
 
 ### Lab7
