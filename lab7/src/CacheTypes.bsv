@@ -3,8 +3,8 @@ import Vector::*;
 
 /* =============== MODIFY HERE FOR SIMULATION =============== */
 // When you are using direct mapped cache, LinesPerSet must be 1.
-typedef 1 WordsPerBlock;  // You can change this to 1, 2, 4,..
-typedef 1 LinesPerSet;   // You can change this to 1, 2, 4,..
+typedef 4 WordsPerBlock;  // You can change this to 1, 2, 4,..
+typedef 8 LinesPerSet;   // You can change this to 1, 2, 4,..
 /* ========================================================== */
 
 

@@ -63,7 +63,6 @@ module mkProc(Proc);
     iMem.init.request.put(e);
   endrule
 
-
   rule doFetch(csrf.started && stat == AOK);
     let updatedPC = pc;
     let updatedfEpoch = fEpoch;
@@ -130,11 +129,13 @@ module mkProc(Proc);
         Ld :
         begin
 			    /* TODO: use dCache for request */
+          dCache.req(MemReq{op:Ld, addr: eInst.addr, data: ?});
         end
 
         St:
         begin
 			    /* TODO: use dCache for request */
+          dCache.req(MemReq{op:St, addr: eInst.addr, data: eInst.data});
         end
 
         Unsupported :
@@ -156,7 +157,7 @@ module mkProc(Proc);
       case(eInst.iType)
         Ld:
           begin
-            let ldData <- dCache.resp; //
+            let ldData <- dCache.resp; 
             eInst.data = ldData;
           end
       endcase
@@ -166,6 +167,16 @@ module mkProc(Proc);
       end
       csrf.wr(eInst.iType == Csrw ? eInst.csr : Invalid, eInst.data);
       $display("Write Back done");
+      
+      // Cache statistics
+      if (eInst.iType == Csrw && isValid(eInst.csr) && fromMaybe(?, eInst.csr) == csrMtohost) begin
+        let miss_count = dCache.getMissCnt();
+        let total_count = dCache.getTotalReq();
+        $fwrite(stderr, "\n===========================\n");
+        $fwrite(stderr, "Cache Statistics\n");
+        $fwrite(stderr, "Total Requests : %d\n", total_count);
+        $fwrite(stderr, "Cache Misses   : %d\n", miss_count);
+      end
 
       case(eInst.iType)
         J: csrf.incInstTypeCnt(Ctr);

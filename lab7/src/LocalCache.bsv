@@ -80,7 +80,6 @@ module mkCacheSetAssociative (Cache);
 				ret = tagged Valid fromInteger(i);
 			end
 		end
-
 		return ret;
 	endfunction
 
@@ -112,8 +111,6 @@ module mkCacheSetAssociative (Cache);
 	    endaction;
     endfunction
 
-	
-
 	/* You can use this function in rules(startMiss,waitFillResp) when implement set associative cache */
 	function SetOffset findLineToUse(CacheIndex idx);
 		// if empty line exists, use that line.
@@ -126,13 +123,10 @@ module mkCacheSetAssociative (Cache);
 		end
 	endfunction
 
-
-
  	let inited = truncateLSB(init) == 1'b1;
 
 	rule initialize(!inited);
 		init <= init + 1;
-
 		for(Integer i = 0; i< valueOf(LinesPerSet);i = i+1)
 		begin
 			tagArray[i].upd(truncate(init), Invalid);
@@ -141,16 +135,77 @@ module mkCacheSetAssociative (Cache);
 		end
 	endrule
 
+	// When cache miss: proc -> cache -> mem -> cache -> proc
+	// -> 1: check if miss
+	// -> 2: check dirty array & send wb req to update mem (if needed) + send read req to mem 
+	// -> 3: send data
+	// -> 4: see missreq, and send data to CPU (act like data is in cache)
+
 	rule startMiss(status == StartMiss);
 		/* TODO: Implement here */
+		let r = missReq;
+		let cI = getIdx(r.addr);
+    	let cT = getTag(r.addr);
+
+		let lineToUse = findLineToUse(cI);
+		targetLine <= tagged Valid lineToUse;
+
+		Bool isDirty = dirtyArray[lineToUse].sub(cI);
+		Maybe#(CacheTag) oldTag = tagArray[lineToUse].sub(cI);
+		let burstLen = fromInteger(valueOf(WordsPerBlock)); // Bit# type으로 change
+
+		if (isDirty && isValid(oldTag)) begin 
+			// dirty인 경우 먼저 그 부분에 쓰인 값을 mem에 update
+			let oldTagVal = fromMaybe(?, oldTag);
+			let oldAddr = getBlockAddr(oldTagVal, cI);
+			let updateData = dataArray[lineToUse].sub(cI);
+			memReqQ.enq(CacheMemReq{op:St, addr:oldAddr, data:updateData, burstLength:burstLen});
+		end
+		// else begin
+		// 	// When not dirty miss 
+		// 	let newAddr = getBlockAddr(cT, cI);
+		// 	memReqQ.enq(CacheMemReq{op:Ld, addr:newAddr, data:?, burstLength:burstLen});
+		// 	status <= WaitFillResp;
+		// end
+		status <= SendFillReq;
 	endrule
 
 	rule sendFillReq(status == SendFillReq);
 		/* TODO: Implement here */
+		// get data from mem
+		let r = missReq;
+		let cI = getIdx(r.addr);
+    	let cT = getTag(r.addr);
+		let newAddr = getBlockAddr(cT, cI);
+		let burstLen = fromInteger(valueOf(WordsPerBlock));
+
+		memReqQ.enq(CacheMemReq{op:Ld, addr: newAddr, data:?, burstLength:burstLen});
+		status <= WaitFillResp;
 	endrule
 
 	rule waitFillResp(status == WaitFillResp);
 		/* TODO: Implement here */
+		let respData = memRespQ.first;
+		memRespQ.deq;
+
+		let r = missReq;
+		let cI = getIdx(r.addr);
+		let cT = getTag(r.addr);
+    	let bO = getOffset(r.addr);
+		let lineToUpdate = fromMaybe(?, targetLine);
+
+		tagArray[lineToUpdate].upd(cI, tagged Valid cT);
+
+		case(r.op) // Only this case!
+			Ld: begin // Load, CPU로 전달 
+				hitQ.enq(respData[bO]);
+				dataArray[lineToUpdate].upd(cI, respData);
+				dirtyArray[lineToUpdate].upd(cI, False);
+			end	
+		endcase
+		updateLRUArray(cI, lineToUpdate);
+        targetLine <= Invalid;
+		status <= Ready;
 	endrule
 
 	method Action req(MemReq r) if (status == Ready && inited);
@@ -162,8 +217,44 @@ module mkCacheSetAssociative (Cache);
 		//     - If r.op == St, send store request.
 
 		/* TODO: Implement here */
-		let hit = ?;
+		CacheIndex cI = getIdx(r.addr);
+		CacheTag cT = getTag(r.addr);
+		BlockOffset bO = getOffset(r.addr);
 
+		let hit = checkHit(cT, cI);
+
+		if (isValid(hit)) begin
+			$display("Cache HIT at cache index %d", cI);
+			let way = fromMaybe(?, hit);
+			updateLRUArray(cI, way);
+			case(r.op)
+				Ld: begin
+					let wordData = dataArray[way].sub(cI);
+					// dirtyArray[way].upd(cI, False);
+					hitQ.enq(wordData[bO]);
+				end
+				St: begin
+					let newLine = dataArray[way].sub(cI);
+					newLine[bO] = r.data;
+					dirtyArray[way].upd(cI, True);
+					dataArray[way].upd(cI, newLine);
+				end
+			endcase
+		end 
+		else begin
+			$display("Cache MISS at cache index %d", cI);
+			case (r.op)
+				Ld: begin 
+					missReq <= r;
+					status <= StartMiss;
+				end
+				St: begin // Load인 경우만 cache에 값 반환! (그 word 하나만)
+					Line writeData = replicate(?); 
+					writeData[0] = r.data; 
+					memReqQ.enq(CacheMemReq{op:St, addr: r.addr, data: writeData, burstLength: 1});
+				end
+			endcase
+		end
 
 		/* DO NOT MODIFY BELOW HERE! */
 		if(!isValid(hit))
@@ -172,7 +263,6 @@ module mkCacheSetAssociative (Cache);
 		end
 		reqCnt <= reqCnt + 1;  
 	endmethod
-
 
 	method ActionValue#(Data) resp;
 		hitQ.deq;
