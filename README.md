@@ -32,4 +32,4 @@ Implementing a 5-stage pipelined RISC-V CPU, by solving control hazards using ep
 lab6-2 is the same, but solves data hazards by forwarding.
 
 ### Lab7
-Implementing a RISC-V CPU using local cache.
+Implementing a 3-stage pipelined RISC-V CPU using local cache. We check the miss rate and # of cycles decrease as we increase the block size and the associativity.
