@@ -148,7 +148,6 @@ module mkCacheSetAssociative (Cache);
     	let cT = getTag(r.addr);
 
 		let lineToUse = findLineToUse(cI);
-		targetLine <= tagged Valid lineToUse;
 
 		Bool isDirty = dirtyArray[lineToUse].sub(cI);
 		Maybe#(CacheTag) oldTag = tagArray[lineToUse].sub(cI);
@@ -156,17 +155,11 @@ module mkCacheSetAssociative (Cache);
 
 		if (isDirty && isValid(oldTag)) begin 
 			// dirty인 경우 먼저 그 부분에 쓰인 값을 mem에 update
-			let oldTagVal = fromMaybe(?, oldTag);
+			let oldTagVal = validValue(oldTag);
 			let oldAddr = getBlockAddr(oldTagVal, cI);
 			let updateData = dataArray[lineToUse].sub(cI);
 			memReqQ.enq(CacheMemReq{op:St, addr:oldAddr, data:updateData, burstLength:burstLen});
 		end
-		// else begin
-		// 	// When not dirty miss 
-		// 	let newAddr = getBlockAddr(cT, cI);
-		// 	memReqQ.enq(CacheMemReq{op:Ld, addr:newAddr, data:?, burstLength:burstLen});
-		// 	status <= WaitFillResp;
-		// end
 		status <= SendFillReq;
 	endrule
 
@@ -192,19 +185,14 @@ module mkCacheSetAssociative (Cache);
 		let cI = getIdx(r.addr);
 		let cT = getTag(r.addr);
     	let bO = getOffset(r.addr);
-		let lineToUpdate = fromMaybe(?, targetLine);
+		let lineToUpdate = findLineToUse(cI);
 
 		tagArray[lineToUpdate].upd(cI, tagged Valid cT);
+		dataArray[lineToUpdate].upd(cI, respData);
+		dirtyArray[lineToUpdate].upd(cI, False);
+		hitQ.enq(respData[bO]);
 
-		case(r.op) // Only this case!
-			Ld: begin // Load, CPU로 전달 
-				hitQ.enq(respData[bO]);
-				dataArray[lineToUpdate].upd(cI, respData);
-				dirtyArray[lineToUpdate].upd(cI, False);
-			end	
-		endcase
 		updateLRUArray(cI, lineToUpdate);
-        targetLine <= Invalid;
 		status <= Ready;
 	endrule
 
@@ -224,13 +212,11 @@ module mkCacheSetAssociative (Cache);
 		let hit = checkHit(cT, cI);
 
 		if (isValid(hit)) begin
-			$display("Cache HIT at cache index %d", cI);
-			let way = fromMaybe(?, hit);
+			let way = validValue(hit);
 			updateLRUArray(cI, way);
 			case(r.op)
 				Ld: begin
 					let wordData = dataArray[way].sub(cI);
-					// dirtyArray[way].upd(cI, False);
 					hitQ.enq(wordData[bO]);
 				end
 				St: begin
@@ -242,7 +228,6 @@ module mkCacheSetAssociative (Cache);
 			endcase
 		end 
 		else begin
-			$display("Cache MISS at cache index %d", cI);
 			case (r.op)
 				Ld: begin 
 					missReq <= r;

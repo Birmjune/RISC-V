@@ -168,15 +168,15 @@ module mkProc(Proc);
       csrf.wr(eInst.iType == Csrw ? eInst.csr : Invalid, eInst.data);
       $display("Write Back done");
       
-      // Cache statistics
-      if (eInst.iType == Csrw && isValid(eInst.csr) && fromMaybe(?, eInst.csr) == csrMtohost) begin
-        let miss_count = dCache.getMissCnt();
-        let total_count = dCache.getTotalReq();
-        $fwrite(stderr, "\n===========================\n");
-        $fwrite(stderr, "Cache Statistics\n");
-        $fwrite(stderr, "Total Requests : %d\n", total_count);
-        $fwrite(stderr, "Cache Misses   : %d\n", miss_count);
-      end
+      // Cache statistics (이 줄이 있으면 cycle 수가 이상하게 나옴? 왜 그렇지? dCache req 때문으로 추정)
+      // if (eInst.iType == Csrw && isValid(eInst.csr) && fromMaybe(?, eInst.csr) == csrMtohost) begin
+      //   let miss_count = dCache.getMissCnt();
+      //   let total_count = dCache.getTotalReq();
+      //   $fwrite(stderr, "\n===========================\n");
+      //   $fwrite(stderr, "Cache Statistics\n");
+      //   $fwrite(stderr, "Total Requests : %d\n", total_count);
+      //   $fwrite(stderr, "Cache Misses   : %d\n", miss_count);
+      // end
 
       case(eInst.iType)
         J: csrf.incInstTypeCnt(Ctr);
